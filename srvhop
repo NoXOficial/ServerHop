@@ -1,0 +1,125 @@
+--[=========================================================================================]--
+--     SIMPLE SERVER-HOP HUB - ROBLOX                                                      --
+--[=========================================================================================]--
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+
+local lPlayer = Players.LocalPlayer
+local pGui = lPlayer:WaitForChild("PlayerGui")
+
+-- Contenedor principal
+local guiCore = Instance.new("ScreenGui")
+guiCore.Name = "ServerHop_" .. math.random(1000, 9999)
+guiCore.ResetOnSpawn = false
+guiCore.Parent = pGui
+
+-- Panel Principal Arrastrable
+local mainFrame = Instance.new("Frame", guiCore)
+mainFrame.Size = UDim2.new(0, 220, 0, 130)
+mainFrame.Position = UDim2.new(0.5, -110, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BorderSizePixel = 0
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.fromRGB(70, 70, 70)
+
+-- Título del Menú
+local titleLabel = Instance.new("TextLabel", mainFrame)
+titleLabel.Size = UDim2.new(1, 0, 0, 35)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "🌐 SERVER HOP 🌐"
+titleLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 12
+
+-- Botón de Server Hop
+local hopBtn = Instance.new("TextButton", mainFrame)
+hopBtn.Size = UDim2.new(0, 190, 0, 45)
+hopBtn.Position = UDim2.new(0.5, -95, 0, 55)
+hopBtn.BackgroundColor3 = Color3.fromRGB(40, 110, 200)
+hopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+hopBtn.Font = Enum.Font.GothamBold
+hopBtn.TextSize = 12
+hopBtn.Text = "BUSCAR SERVER VACÍO"
+
+Instance.new("UICorner", hopBtn).CornerRadius = UDim.new(0, 6)
+local btnStroke = Instance.new("UIStroke", hopBtn)
+btnStroke.Color = Color3.fromRGB(80, 150, 255)
+
+-- Función lógica de Server Hop automático
+local function serverHop()
+    hopBtn.Text = "BUSCANDO..."
+    hopBtn.BackgroundColor3 = Color3.fromRGB(180, 100, 30)
+    
+    local servers = {}
+    local cursor = ""
+    local gameId = game.PlaceId
+    
+    -- Consultar la API pública de servidores de Roblox
+    while true do
+        local url = "https://games.roblox.com/v1/games/" .. gameId .. "/servers/Public?sortOrder=Asc&limit=100"
+        if cursor ~= "" then
+            url = url .. "&cursor=" + cursor
+        end
+        
+        local success, response = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        
+        if success and response and response.data then
+            for _, srv in ipairs(response.data) do
+                -- Buscar servidores que tengan espacio libre y no estén llenos
+                if type(srv) == "table" and srv.playing and srv.maxPlayers and srv.id ~= game.JobId then
+                    if srv.playing < srv.maxPlayers then
+                        table.insert(servers, srv.id)
+                    end
+                end
+            end
+            
+            -- Si encontramos servidores disponibles, nos metemos a uno aleatorio de los vacíos/con poca gente
+            if #servers > 0 then
+                local targetServer = servers[math.random(1, #servers)]
+                hopBtn.Text = "¡UNIENDO!"
+                TeleportService:TeleportToPlaceInstance(gameId, targetServer, lPlayer)
+                return
+            end
+            
+            cursor = response.nextPageCursor
+            if not cursor then break end
+        else
+            break
+        end
+        task.wait(0.2)
+    end
+    
+    -- Si por alguna razón no encuentra
+    hopBtn.Text = "¡NO SE ENCONTRÓ!"
+    task.wait(2)
+    hopBtn.Text = "BUSCAR SERVER VACÍO"
+    hopBtn.BackgroundColor3 = Color3.fromRGB(40, 110, 200)
+end
+
+hopBtn.MouseButton1Click:Connect(serverHop)
+
+-- Sistema de Arrastre del Menú
+local dragging, dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input) 
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
+        dragging = false 
+    end 
+end)
